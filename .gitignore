@@ -1,0 +1,22 @@
+target/
+*.class
+*.jar
+!**/src/**/*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Never commit credentials
+*.pem
+credentials
+.aws/
+.env
+
+# Outputs
+*.html
+*.log
