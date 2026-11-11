@@ -46,6 +46,18 @@ java -jar local-app/target/local-app.jar inputFileName outputFileName manager-cl
 
 ## How the program works
 
+### Visibility timeout and failures (Partner B)
+
+When a Worker receives a task, SQS hides it from all other Workers for 60 s (the visibility timeout). The timeout is 60 s because one image normally takes a few seconds (download plus OCR), so 60 s is longer than normal processing, and short enough that the work of a dead Worker comes back in about a minute.
+
+A slow image does not get stolen. While the Worker processes a message, a small background thread extends the timeout by another 60 s every 30 s (ChangeMessageVisibility). The message is deleted only after the result was sent to the results queue.
+
+If a Worker dies (instance terminated, crash), its background thread dies with it, nothing extends the timeout any more, the message becomes visible again within 60 s, and another Worker takes it. Nothing is lost. The cost is that an image can be processed twice if the Worker dies after sending the result but before deleting the message. This is SQS at-least-once delivery, and the Manager removes duplicates using jobId and index, so a second result for the same image is harmless (idempotency).
+
+Errors on a single image (404, dead host, not an image, timeout, OCR error) are not retried. They are reported as an IMAGE_RESULT with an error, because retrying a deterministic failure would loop for nothing. Downloads have a 10 s connect and 30 s read timeout, so a slow server cannot block a Worker for long.
+
+Limitation: the heartbeat does not know whether the OCR call itself is stuck. A Worker that hangs inside Tesseract would keep renewing its message. We did not add a cap because it did not occur in our tests. We also did not configure a dead-letter queue; one would stop an image that crashes every Worker from being redelivered forever.
+
 ### Worker (Partner B)
 
 The Worker is one loop. It waits on the tasks queue with long polling (up to 20 s per call, so an empty queue costs almost nothing), takes one message, downloads the image, runs Tesseract, sends an IMAGE_RESULT to the results queue, and only then deletes the task message.
