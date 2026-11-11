@@ -46,6 +46,18 @@ java -jar local-app/target/local-app.jar inputFileName outputFileName manager-cl
 
 ## How the program works
 
+### Local App (Partner B)
+
+Usage: `java -jar local-app.jar inputFileName outputFileName manager-clients-n worker-files-n [terminate]`
+
+Each run gets a random jobId (UUID) and creates its own reply queue named after it. The Local App then asks the Manager locator for a running Manager that serves fewer than manager-clients-n clients, and starts one if there is none. It uploads the input file to S3 (`inputs/<jobId>.txt`) and sends a NEW_TASK message to the Manager's input queue, with the S3 key, the reply queue URL and worker-files-n.
+
+Then it waits on its reply queue with long polling. When the Manager's JOB_DONE message arrives, it carries only the S3 key of the summary. The Local App downloads the summary, writes the HTML file (one paragraph per image: the image, a line break, the recognized text; failed images show the URL and the error; all text is escaped), and deletes the message. If terminate was given, it sends a TERMINATE message to the Manager after writing the HTML. At the end it deletes its reply queue.
+
+Why a private reply queue per run: several Local Apps can run at the same time, and each one only ever sees its own answer. We tested two in parallel and answered one of them: only that one finished, the other kept waiting. Why the queue carries only a key: the summary can be large, so it stays on S3 and the message points to it. The Local App never talks to the Manager directly, only through queues and S3, so either side can be restarted without the other knowing.
+
+Limitation: if a Local App is killed before it finishes, its reply queue is not deleted. AWS Academy credentials also expire after a few hours, and a run that outlives them fails with a 403 on the next call.
+
 ### Visibility timeout and failures (Partner B)
 
 When a Worker receives a task, SQS hides it from all other Workers for 60 s (the visibility timeout). The timeout is 60 s because one image normally takes a few seconds (download plus OCR), so 60 s is longer than normal processing, and short enough that the work of a dead Worker comes back in about a minute.
