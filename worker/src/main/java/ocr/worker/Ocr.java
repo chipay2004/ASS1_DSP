@@ -5,6 +5,7 @@ import java.awt.image.BufferedImage;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.HttpURLConnection;
 import net.sourceforge.tess4j.Tesseract;
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -35,18 +36,29 @@ public class Ocr {
     }
     
     /** Downloads the URL and decodes it as an image. Any failure throws, and Worker reports it. */
-    private BufferedImage loadImage(String url) throws Exception{
-        URLConnection conn = new URL(url).openConnection();
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (compatible; OCR-student-project/1.0)");
-        conn.setConnectTimeout(10_000); 
-        conn.setReadTimeout(30_000);   
-        try (InputStream in = conn.getInputStream()){ 
-            BufferedImage img = ImageIO.read(in);
-            if (img == null){
-                throw new Exception("Not an image"); // ImageIO returns null
-            } 
-            return img;
+    private BufferedImage loadImage(String url) throws Exception {
+        String current = url;
+        for (int hop = 0; hop < 5; hop++) {            // why: fail fast on redirect loops
+            HttpURLConnection conn = (HttpURLConnection) new URL(current).openConnection();
+            conn.setInstanceFollowRedirects(false);    // why: Java won't follow http -> https, so we do it by hand
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (compatible; OCR-student-project/1.0)");
+            conn.setConnectTimeout(10_000);
+            conn.setReadTimeout(30_000);
+            int code = conn.getResponseCode();
+            if (code >= 300 && code < 400) {
+                String loc = conn.getHeaderField("Location");
+                conn.disconnect();
+                if (loc == null) { throw new Exception("Redirect without Location"); }
+                current = new URL(new URL(current), loc).toString();   // also handles relative Location
+                continue;
+            }
+            try (InputStream in = conn.getInputStream()) {   // 404 still throws FileNotFoundException, as before
+                BufferedImage img = ImageIO.read(in);
+                if (img == null) { throw new Exception("Not an image"); }
+                return img;
+            }
         }
+        throw new Exception("Too many redirects");
     }
 
     /** Converts any image to 8-bit grayscale pixels in a direct buffer, ready for Tesseract's raw-pixel API. */
