@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.sqs.model.Message;
  * Takes ONE message at a time so no worker hoards work while others sit idle.
  */
 public class Worker {
+    
 
     public static void main(String[] args) {
         Aws aws = new Aws();
@@ -58,13 +59,19 @@ public class Worker {
         return t;
     });
 
+    private static final long HEARTBEAT_MAX_MS = 5 * 60_000;   // a message needing more than 5 min is treated as stuck
+
     /** Every 30 s, tell SQS to keep hiding this message for another 60 s. */
-    private static ScheduledFuture<?> startHeartbeat(Aws aws, String queueUrl, Message m) {
+    private static ScheduledFuture<?> startHeartbeat(Aws aws, String queueUrl, Message m){
+        final long start = System.currentTimeMillis();
         return HEARTBEAT.scheduleAtFixedRate(() -> {
+            if(System.currentTimeMillis() - start > HEARTBEAT_MAX_MS){
+                return; // stop retrying so SQS could give the message to another worker
+            }
             try {
                 aws.extendVisibility(queueUrl, m, Config.WORKER_VISIBILITY_TIMEOUT_SEC);
             } catch (Exception e) {
-                // swallow so the schedule keeps running; the next tick retries
+                // the next tick retries
             }
         }, 30, 30, TimeUnit.SECONDS);
     }
