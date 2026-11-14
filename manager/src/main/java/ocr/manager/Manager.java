@@ -1,8 +1,12 @@
 package ocr.manager;
 
+import java.util.List;
+
 import ocr.common.Aws;
 import ocr.common.Config;
 import ocr.common.Messages;
+import ocr.common.Messages.NewTask;
+import software.amazon.awssdk.services.sqs.model.Message;
 
 /**
  * OWNER: Partner A.
@@ -29,10 +33,70 @@ public class Manager {
 
         System.out.println("Manager up. Queues: " + inputQueue + ", " + tasksQueue + ", " + resultsQueue);
         // TODO(A): everything above
+        
     }
 
     @SuppressWarnings("unused")
-    private static void handle(Messages.Message m) {
-        // TODO(A)
+    private static void handle(Messages.Message m) 
+    {
+        
     }
+
+    private static void dispatch(Message currMsg, Aws aws, String inputQueueUrl, String tasksQueue)
+    {   Messages.Message parsed;
+        try 
+        {
+           parsed = Messages.parse(currMsg.body());    
+        } 
+        catch (Exception e)
+        {
+            aws.deleteMessage(inputQueueUrl, currMsg);
+            System.err.println("Broken json");
+            return;
+        }
+        
+        if(parsed.type == Messages.Type.NEW_TASK)
+        {
+            handleNewTask((Messages.NewTask)parsed, tasksQueue, aws);
+        }
+        else if(parsed.type == Messages.Type.TERMINATE)
+        {
+            handleTerminate();
+        }
+
+        aws.deleteMessage(inputQueueUrl, currMsg);
+    }
+    private static void handleNewTask(Messages.NewTask parsed, String tasksQueue, Aws aws) 
+    {
+        if(aws.parsed.jobId
+    }
+
+    private static void receiveLoop(String inputQueue, Aws aws, String tasksQueue)
+    {
+        while (true)
+        {
+            List<Message> messages;
+            try
+            {
+                messages = aws.receive(inputQueue, 10, 0);
+            }
+            catch (Exception e)
+            {
+                System.err.println("receive failed: " + e.getMessage());
+                continue;
+            }
+            for (Message message : messages)
+            {
+                try
+                {
+                    dispatch(message, aws, inputQueue, tasksQueue);
+                }
+                catch (Exception e)
+                {
+                    System.err.println("failed to handle message " + message.messageId() + ": " + e.getMessage());
+                }
+            }
+        }
+    }
+    
 }
