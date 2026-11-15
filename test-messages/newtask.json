@@ -1,0 +1,1 @@
+{"type":"NEW_TASK","jobId":"test-1","inputKey":"inputs/test-1.txt","replyQueueUrl":"https://sqs.us-east-1.amazonaws.com/471112502626/ocr-reply-test-1","filesPerWorker":5}
