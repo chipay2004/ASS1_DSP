@@ -45,7 +45,7 @@ public final class Config {
     /** AWS blocks students above this. Manager + workers together. */
     public static final int MAX_INSTANCES = 19;
 
-    public static final String AMI_ID = env("OCR_AMI", "ami-CHANGE-ME");
+    public static final String AMI_ID = env("OCR_AMI", "ami-08b275ac6cc5dbefb");
     public static final String INSTANCE_TYPE = "t2.micro";
     /** AWS Academy role: gives the instance credentials, so none go in the jar. */
     public static final String INSTANCE_PROFILE = "LabInstanceProfile";
