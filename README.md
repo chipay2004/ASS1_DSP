@@ -68,7 +68,7 @@ If a Worker dies (instance terminated, crash), its background thread dies with i
 
 Errors on a single image (404, dead host, not an image, timeout, OCR error) are not retried. They are reported as an IMAGE_RESULT with an error, because retrying a deterministic failure would loop for nothing. Downloads have a 10 s connect and 30 s read timeout, so a slow server cannot block a Worker for long.
 
-Limitation: the heartbeat does not know whether the OCR call itself is stuck. A Worker that hangs inside Tesseract would keep renewing its message. We did not add a cap because it did not occur in our tests. We also did not configure a dead-letter queue; one would stop an image that crashes every Worker from being redelivered forever.
+Limitation: the heartbeat stops renewing a message after 5 minutes, so an image that hangs a Worker is handed to another Worker. The hung Worker itself stays stuck until its instance is terminated. We did not configure a dead-letter queue; one would stop an image that hangs or crashes every Worker from being redelivered forever.
 
 ### Worker (Partner B)
 
