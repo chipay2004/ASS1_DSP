@@ -70,6 +70,8 @@ Errors on a single image (404, dead host, not an image, timeout, OCR error) are 
 
 Limitation: the heartbeat stops renewing a message after 5 minutes, so an image that hangs a Worker is handed to another Worker. The hung Worker itself stays stuck until its instance is terminated. We did not configure a dead-letter queue; one would stop an image that hangs or crashes every Worker from being redelivered forever.
 
+Test: during an 80-image job we killed the only running Worker with Ctrl+C. After the timeout we started a second Worker; it processed the remaining images, and the summary contained all 80 results.
+
 ### Worker (Partner B)
 
 The Worker is one loop. It waits on the tasks queue with long polling (up to 20 s per call, so an empty queue costs almost nothing), takes one message, downloads the image, runs Tesseract, sends an IMAGE_RESULT to the results queue, and only then deletes the task message.
@@ -79,4 +81,3 @@ If one image fails (404, dead host, not an image, OCR error), the Worker catches
 Why one message at a time: a message that a Worker has received is hidden from all other Workers until it is deleted. A Worker that took 10 messages would keep 9 of them hidden while it worked on the first, other Workers would sit idle, and if it died all 10 would wait for the timeout. One message at a time spreads the work evenly across the Workers and limits a crash to one image.
 
 Why no threads inside a Worker: the Tesseract object is not thread-safe, so each Worker runs one OCR at a time. Parallelism comes from running many Workers on many instances, which the Manager controls through n. The only extra thread is a small background thread that renews the message's visibility timeout (see the failures section).
-Test: during an 80-image job we killed the only running Worker with Ctrl+C. After the timeout we started a second Worker; it processed the remaining images, and the summary contained all 80 results.
