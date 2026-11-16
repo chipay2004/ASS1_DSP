@@ -46,8 +46,19 @@ public class LocalApp {
         aws.send(managerQueue, new Messages.NewTask(jobId, Config.inputKey(jobId), replyQueue, workerFilesN));
 
         // 4. Wait for JOB_DONE
-        // TODO(B): loop aws.receive(replyQueue, 1, 0) until a JobDone arrives, delete it
-        String summaryKey = Config.summaryKey(jobId);
+        // Local App never talks to the Manager directly. It waits on its own queue.
+        String summaryKey = null;
+        while (summaryKey == null) {
+            // receive() long-polls up to 20 s, so this loop waits, no busy spinning
+            for (software.amazon.awssdk.services.sqs.model.Message m : aws.receive(replyQueue, 1, 0)) {
+                Messages.Message msg = Messages.parse(m.body());
+                if (msg instanceof Messages.JobDone done && done.jobId.equals(jobId)) {
+                    summaryKey = done.summaryKey;   // the summary file's location on S3 
+                }
+                aws.deleteMessage(replyQueue, m);  
+            }
+        }
+    
 
         // 5. Download summary + write HTML
         List<ImageResult> results = Messages.summaryFromJson(aws.downloadString(summaryKey));
