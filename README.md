@@ -40,8 +40,8 @@ java -jar local-app/target/local-app.jar inputFileName outputFileName manager-cl
 ## Required README sections (fill before submitting)
 
 - How the program works
-- Instance type + AMI: TODO
-- Run time on the sample input: TODO, with n = TODO
+- Instance type + AMI: `ami-08b275ac6cc5dbefb` (Ubuntu 24.04, x86, us-east-1); `t2.micro` for the Manager and the Workers
+- Run time on the sample input: about 3 minutes (2 min 60 s) with n = 5 (24 images, 5 Workers, Manager and Workers on t2.micro)
 - Security, scalability, persistence / failures, threads, termination
 
 ## How the program works
