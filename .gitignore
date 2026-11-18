@@ -20,3 +20,5 @@ credentials
 # Outputs
 *.html
 *.log
+input.txt
+managerlog.txt

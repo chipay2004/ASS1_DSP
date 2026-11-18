@@ -19,7 +19,7 @@ public final class UserData
 				mkdir -p /opt/ocr && cd /opt/ocr
 				/snap/bin/aws s3 cp s3://{{BUCKET}}/jars/manager.jar manager.jar
 				export OCR_BUCKET={{BUCKET}}
-				java -jar manager.jar > manager.log 2>&1
+				java -jar manager.jar 2>&1 | tee manager.log
 				""".replace("{{BUCKET}}", Config.BUCKET);
 	}
 
@@ -34,7 +34,7 @@ public final class UserData
 				/snap/bin/aws s3 cp s3://{{BUCKET}}/jars/worker.jar worker.jar
 				export TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 				export OCR_BUCKET={{BUCKET}}
-				java -jar worker.jar > worker.log 2>&1
+				java -jar worker.jar 2>&1 | tee worker.log
 				""".replace("{{BUCKET}}", Config.BUCKET);
 	}
 }
