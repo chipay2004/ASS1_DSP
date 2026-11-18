@@ -40,8 +40,8 @@ java -jar local-app/target/local-app.jar inputFileName outputFileName manager-cl
 ## Required README sections (fill before submitting)
 
 - How the program works
-- Instance type + AMI: TODO
-- Run time on the sample input: TODO, with n = TODO
+- Instance type + AMI: `ami-08b275ac6cc5dbefb` (Ubuntu 24.04, x86, us-east-1); `t2.micro` for the Manager and the Workers
+- Run time on the sample input: about 3 minutes (2 min 60 s) with n = 5 (24 images, 5 Workers, Manager and Workers on t2.micro)
 - Security, scalability, persistence / failures, threads, termination
 
 ## How the program works
@@ -70,6 +70,8 @@ Errors on a single image (404, dead host, not an image, timeout, OCR error) are 
 
 Limitation: the heartbeat stops renewing a message after 5 minutes, so an image that hangs a Worker is handed to another Worker. The hung Worker itself stays stuck until its instance is terminated. We did not configure a dead-letter queue; one would stop an image that hangs or crashes every Worker from being redelivered forever.
 
+Test: during an 80-image job we killed the only running Worker with Ctrl+C. After the timeout we started a second Worker; it processed the remaining images, and the summary contained all 80 results.
+
 ### Worker (Partner B)
 
 The Worker is one loop. It waits on the tasks queue with long polling (up to 20 s per call, so an empty queue costs almost nothing), takes one message, downloads the image, runs Tesseract, sends an IMAGE_RESULT to the results queue, and only then deletes the task message.
@@ -79,4 +81,15 @@ If one image fails (404, dead host, not an image, OCR error), the Worker catches
 Why one message at a time: a message that a Worker has received is hidden from all other Workers until it is deleted. A Worker that took 10 messages would keep 9 of them hidden while it worked on the first, other Workers would sit idle, and if it died all 10 would wait for the timeout. One message at a time spreads the work evenly across the Workers and limits a crash to one image.
 
 Why no threads inside a Worker: the Tesseract object is not thread-safe, so each Worker runs one OCR at a time. Parallelism comes from running many Workers on many instances, which the Manager controls through n. The only extra thread is a small background thread that renews the message's visibility timeout (see the failures section).
-Test: during an 80-image job we killed the only running Worker with Ctrl+C. After the timeout we started a second Worker; it processed the remaining images, and the summary contained all 80 results.
+
+## Security
+
+Local App and Worker: there are no credentials in the code, the jars, the user-data scripts or the repository. The Local App uses the AWS credentials of the person who runs it (`~/.aws/credentials`, which `.gitignore` keeps out of Git). The EC2 instances get temporary credentials from the Lab instance profile (`LabInstanceProfile`), so nothing secret is passed in user-data or stored on the machine; the user-data script contains only the bucket name. The S3 bucket is private: the Local App reads the summary through the SDK with its own credentials, so no file is made public.
+
+Everything that comes from the internet is treated as untrusted. The URLs and the OCR text are HTML-escaped before they go into the output page, and a Worker only decodes the downloaded bytes as an image; it never runs anything it downloaded. Limitation: downloads have time limits but no size limit, so a very large file could use up the memory of a Worker.
+
+## Scalability
+
+Local App and Worker: neither keeps state that another machine would need. Each Local App run has its own jobId and its own reply queue, so any number of Local Apps can run at the same time without seeing each other's messages. A Local App does one upload, sends one message, waits with long polling (almost no cost) and does one download. Workers take one message at a time from one shared queue, so more images means more Workers; the Manager starts them according to the number of images and worker-files-n. Messages carry only a URL or an S3 key and never the data itself (the claim check pattern), so message size stays small however big the input is. SQS and S3 are managed services that grow with the load.
+
+Limits: the account allows at most 19 instances (Manager and Workers together), so a huge input makes the Workers work longer instead of starting more of them. The Manager keeps a job list in memory and is the part that scales least; see the Manager's section.
