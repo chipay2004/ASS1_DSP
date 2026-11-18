@@ -40,6 +40,56 @@ java -jar local-app/target/local-app.jar inputFileName outputFileName manager-cl
 ## Required README sections (fill before submitting)
 
 - How the program works
-- Instance type + AMI: TODO
-- Run time on the sample input: TODO, with n = TODO
+- Instance type + AMI: `ami-08b275ac6cc5dbefb` (Ubuntu 24.04, x86, us-east-1); `t2.micro` for the Manager and the Workers
+- Run time on the sample input: about 3 minutes (2 min 60 s) with n = 5 (24 images, 5 Workers, Manager and Workers on t2.micro)
 - Security, scalability, persistence / failures, threads, termination
+
+## How the program works
+
+### Local App (Partner B)
+
+Usage: `java -jar local-app.jar inputFileName outputFileName manager-clients-n worker-files-n [terminate]`
+
+Each run gets a random jobId (UUID) and creates its own reply queue named after it. The Local App then asks the Manager locator for a running Manager that serves fewer than manager-clients-n clients, and starts one if there is none. It uploads the input file to S3 (`inputs/<jobId>.txt`) and sends a NEW_TASK message to the Manager's input queue, with the S3 key, the reply queue URL and worker-files-n.
+
+Then it waits on its reply queue with long polling. When the Manager's JOB_DONE message arrives, it carries only the S3 key of the summary. The Local App downloads the summary, writes the HTML file (one paragraph per image: the image, a line break, the recognized text; failed images show the URL and the error; all text is escaped), and deletes the message. If terminate was given, it sends a TERMINATE message to the Manager after writing the HTML. At the end it deletes its reply queue.
+
+Why a private reply queue per run: several Local Apps can run at the same time, and each one only ever sees its own answer. We tested two in parallel and answered one of them: only that one finished, the other kept waiting. Why the queue carries only a key: the summary can be large, so it stays on S3 and the message points to it. The Local App never talks to the Manager directly, only through queues and S3, so either side can be restarted without the other knowing.
+
+Limitation: if a Local App is killed before it finishes, its reply queue is not deleted. AWS Academy credentials also expire after a few hours, and a run that outlives them fails with a 403 on the next call.
+
+### Visibility timeout and failures (Partner B)
+
+When a Worker receives a task, SQS hides it from all other Workers for 60 s (the visibility timeout). The timeout is 60 s because one image normally takes a few seconds (download plus OCR), so 60 s is longer than normal processing, and short enough that the work of a dead Worker comes back in about a minute.
+
+A slow image does not get stolen. While the Worker processes a message, a small background thread extends the timeout by another 60 s every 30 s (ChangeMessageVisibility). The message is deleted only after the result was sent to the results queue.
+
+If a Worker dies (instance terminated, crash), its background thread dies with it, nothing extends the timeout any more, the message becomes visible again within 60 s, and another Worker takes it. Nothing is lost. The cost is that an image can be processed twice if the Worker dies after sending the result but before deleting the message. This is SQS at-least-once delivery, and the Manager removes duplicates using jobId and index, so a second result for the same image is harmless (idempotency).
+
+Errors on a single image (404, dead host, not an image, timeout, OCR error) are not retried. They are reported as an IMAGE_RESULT with an error, because retrying a deterministic failure would loop for nothing. Downloads have a 10 s connect and 30 s read timeout, so a slow server cannot block a Worker for long.
+
+Limitation: the heartbeat stops renewing a message after 5 minutes, so an image that hangs a Worker is handed to another Worker. The hung Worker itself stays stuck until its instance is terminated. We did not configure a dead-letter queue; one would stop an image that hangs or crashes every Worker from being redelivered forever.
+
+Test: during an 80-image job we killed the only running Worker with Ctrl+C. After the timeout we started a second Worker; it processed the remaining images, and the summary contained all 80 results.
+
+### Worker (Partner B)
+
+The Worker is one loop. It waits on the tasks queue with long polling (up to 20 s per call, so an empty queue costs almost nothing), takes one message, downloads the image, runs Tesseract, sends an IMAGE_RESULT to the results queue, and only then deletes the task message.
+
+If one image fails (404, dead host, not an image, OCR error), the Worker catches the exception and sends an IMAGE_RESULT with an error text instead of crashing, so one bad URL never stops the batch. A message that is not valid JSON is deleted and skipped. Redirects (including http to https) are followed by hand, up to 5 hops.
+
+Why one message at a time: a message that a Worker has received is hidden from all other Workers until it is deleted. A Worker that took 10 messages would keep 9 of them hidden while it worked on the first, other Workers would sit idle, and if it died all 10 would wait for the timeout. One message at a time spreads the work evenly across the Workers and limits a crash to one image.
+
+Why no threads inside a Worker: the Tesseract object is not thread-safe, so each Worker runs one OCR at a time. Parallelism comes from running many Workers on many instances, which the Manager controls through n. The only extra thread is a small background thread that renews the message's visibility timeout (see the failures section).
+
+## Security
+
+Local App and Worker: there are no credentials in the code, the jars, the user-data scripts or the repository. The Local App uses the AWS credentials of the person who runs it (`~/.aws/credentials`, which `.gitignore` keeps out of Git). The EC2 instances get temporary credentials from the Lab instance profile (`LabInstanceProfile`), so nothing secret is passed in user-data or stored on the machine; the user-data script contains only the bucket name. The S3 bucket is private: the Local App reads the summary through the SDK with its own credentials, so no file is made public.
+
+Everything that comes from the internet is treated as untrusted. The URLs and the OCR text are HTML-escaped before they go into the output page, and a Worker only decodes the downloaded bytes as an image; it never runs anything it downloaded. Limitation: downloads have time limits but no size limit, so a very large file could use up the memory of a Worker.
+
+## Scalability
+
+Local App and Worker: neither keeps state that another machine would need. Each Local App run has its own jobId and its own reply queue, so any number of Local Apps can run at the same time without seeing each other's messages. A Local App does one upload, sends one message, waits with long polling (almost no cost) and does one download. Workers take one message at a time from one shared queue, so more images means more Workers; the Manager starts them according to the number of images and worker-files-n. Messages carry only a URL or an S3 key and never the data itself (the claim check pattern), so message size stays small however big the input is. SQS and S3 are managed services that grow with the load.
+
+Limits: the account allows at most 19 instances (Manager and Workers together), so a huge input makes the Workers work longer instead of starting more of them. The Manager keeps a job list in memory and is the part that scales least; see the Manager's section.
