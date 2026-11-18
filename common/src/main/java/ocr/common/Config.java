@@ -12,8 +12,7 @@ public final class Config {
     public static final Region REGION = Region.US_EAST_1;
 
     /** Bucket for everything this project puts on S3. Override with env var OCR_BUCKET. */
-    public static final String BUCKET = env("OCR_BUCKET", "ocr-assignment-CHANGE-ME");
-
+    public static final String BUCKET = env("OCR_BUCKET", "ocr-dsp-chipay");
     // ---- SQS queues ----
     /** Local App -> Manager: NEW_TASK and TERMINATE. */
     public static final String MANAGER_INPUT_QUEUE = "ocr-manager-input";
@@ -45,7 +44,7 @@ public final class Config {
     /** AWS blocks students above this. Manager + workers together. */
     public static final int MAX_INSTANCES = 19;
 
-    public static final String AMI_ID = env("OCR_AMI", "ami-CHANGE-ME");
+    public static final String AMI_ID = env("OCR_AMI", "ami-08b275ac6cc5dbefb");
     public static final String INSTANCE_TYPE = "t2.micro";
     /** AWS Academy role: gives the instance credentials, so none go in the jar. */
     public static final String INSTANCE_PROFILE = "LabInstanceProfile";
