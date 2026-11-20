@@ -1,6 +1,11 @@
 # Assignment 1: OCR in the Cloud
 
-Names / IDs: TODO
+Names:
+Amit Frenkel 
+ID: 212757991
+
+Yanir Davidov
+ID: 325913721
 
 ## Project layout
 
@@ -113,6 +118,8 @@ Errors on a single image (404, dead host, not an image, timeout, OCR error) are 
 Limitation: the heartbeat stops renewing a message after 5 minutes, so an image that hangs a Worker is handed to another Worker. The hung Worker itself stays stuck until its instance is terminated. We did not configure a dead-letter queue; one would stop an image that hangs or crashes every Worker from being redelivered forever.
 
 Tests: during an 80-image job we killed the only running Worker with Ctrl+C. After the timeout we started a second Worker; it processed the remaining images, and the summary contained all 80 results. On EC2, we terminated one of the Workers in the middle of the sample input job: the other Worker took over its messages and the output had all 24 lines.
+
+On EC2 we also ran a 480-image job on 2 Workers and terminated one of them in the middle of it. The other Worker took over its messages after the visibility timeout, and the summary had all 480 results; the job only took longer.
 
 ### Worker (Partner B)
 
