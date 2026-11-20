@@ -34,7 +34,7 @@ Worker visibility timeout: 60 s (`Config.WORKER_VISIBILITY_TIMEOUT_SEC`). Every 
 |---|---|---|
 | `inputs/<jobId>.txt` | Local App | Manager |
 | `summaries/<jobId>.json` | Manager | Local App |
-| `jars/manager.jar`, `jars/worker.jar` | `scripts/upload-jars.sh` | instances at boot |
+| `jars/manager.jar`, `jars/worker.jar` | `mvn clean package` + `aws s3 cp` (see README) | instances at boot |
 
 Summary file = JSON array of `IMAGE_RESULT`, sorted by `index`, one per input line.
 Delete the whole bucket at the end to clean up.
@@ -53,6 +53,6 @@ Delete the whole bucket at the end to clean up.
 |---|---|
 | `manager/` | `worker/` |
 | `common/ManagerLocator.java` | `local-app/` |
-| `scripts/*-userdata.sh`, AMI | Tesseract install commands → A |
+| common/UserData.java (boot scripts as Java strings) | Tesseract install commands → A |
 
 Shared: `Config.java`, `Messages.java`, `Aws.java`, this file, README.

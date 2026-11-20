@@ -65,7 +65,7 @@ public class Ocr {
     private static ByteBuffer toGrayBuffer(BufferedImage img) {
         BufferedImage gray = new BufferedImage(img.getWidth(), img.getHeight(), BufferedImage.TYPE_BYTE_GRAY);
         Graphics2D g = gray.createGraphics();
-        g.setColor(Color.WHITE);                       // transparent PNG pixels would turn black; white keeps text readable
+        g.setColor(Color.WHITE);  // transparent PNG pixels would turn black; white keeps text readable
         g.fillRect(0, 0, gray.getWidth(), gray.getHeight());
         g.drawImage(img, 0, 0, null);
         g.dispose();
@@ -74,9 +74,5 @@ public class Ocr {
         buf.put(px);
         buf.flip();
         return buf;
-    }
-
-    public static void main(String[] args) throws Exception {
-        System.out.println(new Ocr().recognize(args[0]));
     }
 }

@@ -14,7 +14,6 @@ public final class HtmlWriter {
     public static void write(List<ImageResult> results, Path output) throws IOException{
         StringBuilder html = new StringBuilder("<html><head><meta charset=\"UTF-8\"><title>OCR</title></head><body>\n");
         for (ImageResult r : results){
-            // TODO(B): match the sample output layout exactly
             if (r.error == null){
                 html.append("<p>\n\t<img src=\"").append(escape(r.url)).append("\"><br>\n\t")
                     .append(escape(r.text)).append("\n</p>\n");
@@ -33,16 +32,4 @@ public final class HtmlWriter {
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
-
-    // TEMP test, delete later. Builds fake results incl. nasty text and a failure.
-    public static void main(String[] args) throws IOException {
-        ImageResult a = new ImageResult();
-    a.url = "http://example.com/a.png"; a.text = "3D Text";
-        ImageResult b = new ImageResult();
-        b.url = "http://example.com/b.png"; b.text = "5 < 6 & \"quotes\" <script>";
-        ImageResult c = new ImageResult();
-        c.url = "http://example.com/c.png"; c.error = "FileNotFoundException: 404";
-        write(List.of(a, b, c), Path.of("test-output.html"));
-        System.out.println("wrote test-output.html");
-    }
 }
